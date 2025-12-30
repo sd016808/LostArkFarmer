@@ -86,6 +86,10 @@ The logic is defined in `script_profile.json`. The application will generate a d
 }
 ```
 
+
+https://github.com/user-attachments/assets/f5cf7e90-a12a-42ee-84f4-e148b455eda5
+
+
 ⚠️ Disclaimer
 
 This software is for educational purposes only. Using automation tools in online games may violate the Terms of Service. The developer is not responsible for any bans or penalties resulting from the use of this tool. Use at your own risk.
