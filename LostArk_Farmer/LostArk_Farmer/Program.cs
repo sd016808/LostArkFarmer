@@ -10,8 +10,8 @@ namespace LostArkAutoPlayer
 {
     class Program
     {
-        const string VERSION = "1.0.1";
-        const string CONFIG_PATH = "script_profile.json";
+        const string VERSION = "1.0.2";
+        const string CONFIG_PATH = "skill_config.json";
 
         static volatile bool _isRunning = false;
         static CancellationTokenSource _cts;
