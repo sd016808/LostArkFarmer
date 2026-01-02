@@ -40,6 +40,21 @@ namespace LostArkAutoPlayer.Services
             }
         }
 
+        // ========================================================================
+        // [新增] 支援類比搖桿的精準控制 (給 VisualPositionService 使用)
+        // ========================================================================
+        public void SetLeftStick(short x, short y)
+        {
+            if (_controller == null) return;
+            try
+            {
+                _controller.SetAxisValue(Xbox360Axis.LeftThumbX, x);
+                _controller.SetAxisValue(Xbox360Axis.LeftThumbY, y);
+            }
+            catch { /* 忽略連線錯誤 */ }
+        }
+        // ========================================================================
+
         public void SendInput(string key, bool isDown)
         {
             if (_controller == null || string.IsNullOrWhiteSpace(key)) return;
@@ -47,7 +62,7 @@ namespace LostArkAutoPlayer.Services
 
             try
             {
-                // 1. 處理搖桿 (Axis)
+                // 1. 處理搖桿 (Axis) - 這是給腳本用的全速移動
                 switch (key)
                 {
                     case "UP": _controller.SetAxisValue(Xbox360Axis.LeftThumbY, isDown ? (short)32767 : (short)0); return;
@@ -86,7 +101,7 @@ namespace LostArkAutoPlayer.Services
                 {
                     _controller.SetButtonState(btn, false);
                 }
-                // 強制送出報告確保歸零生效
+                // 強制送出報告確保歸零生效 (雖然 AutoSubmitReport=true，但在 Reset 時明確呼叫較保險)
                 _controller.SubmitReport();
             }
             catch { /* 忽略連線錯誤 */ }

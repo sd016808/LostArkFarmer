@@ -45,6 +45,7 @@ The logic is defined in `script_profile.json`. The application will generate a d
 
 ### Parameters
 
+* `EnableAutoReturn`: true/false. If enabled, the script will check the map coordinates after every skill loop and move the character back to the starting point (F9 location).
 * `LoopDelayMs`: Time to wait (in ms) after finishing the entire list of skills before starting over.
 * `Skills`: An array of steps to execute.
 
@@ -67,6 +68,7 @@ The logic is defined in `script_profile.json`. The application will generate a d
 ```json
 {
   "LoopDelayMs": 0,
+  "EnableAutoReturn": true,
   "Skills": [
     {
       "Note": "Skill Q (Combo)",
@@ -76,10 +78,10 @@ The logic is defined in `script_profile.json`. The application will generate a d
       "IsSequential": true
     },
     {
-      "Note": "Move Top-Left",
-      "Buttons": [ "LEFT", "UP" ],
-      "PressDurationMs": 750,
-      "CoolDownMs": 150,
+      "Note": "Buff",
+      "Buttons": [ "Y" ],
+      "PressDurationMs": 50,
+      "CoolDownMs": 300,
       "IsSequential": false
     }
   ]

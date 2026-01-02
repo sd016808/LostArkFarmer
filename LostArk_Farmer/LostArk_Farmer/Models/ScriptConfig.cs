@@ -4,8 +4,9 @@ namespace LostArkAutoPlayer.Models
 {
     public class ScriptConfig
     {
-        public int LoopDelayMs { get; set; } = 0;
-        public List<SkillStep> Skills { get; set; } = new List<SkillStep>();
+        public int LoopDelayMs { get; set; }
+        public bool EnableAutoReturn { get; set; } = false;
+        public System.Collections.Generic.List<SkillStep> Skills { get; set; }
     }
 
     public class SkillStep
