@@ -86,8 +86,12 @@ The logic is defined in `skill_config.json`. The application will generate a def
 }
 ```
 
-## DEMO
+## DEMO Background Execute
 https://github.com/user-attachments/assets/f5cf7e90-a12a-42ee-84f4-e148b455eda5
+
+## DEMO Auto Return
+https://github.com/user-attachments/assets/74461b24-44a1-4286-b069-c31f1f5e047e
+
 
 
 ## ⚠️ Disclaimer
