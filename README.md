@@ -11,7 +11,7 @@ This tool utilizes **ViGEm** (Virtual Gamepad Emulation) to simulate Xbox 360 co
 
 * **Background Execution**: Works even when the game window is not focused (requires Borderless/Windowed mode).
 * **Virtual Controller Emulation**: Uses `ViGEmBus` to mimic physical Xbox 360 hardware signals, bypassing standard software input detection.
-* **JSON-Based Profiles**: Fully customizable rotation logic via `script_profile.json`.
+* **JSON-Based Profiles**: Fully customizable rotation logic via `skill_config.json`.
 * **Auto-Updater**: Automatically checks for the latest releases from GitHub and updates seamlessly.
 * **Smart Input Handling**: Supports both **Sequential** (Combo inputs) and **Simultaneous** (Directional movement) input modes.
 
@@ -41,11 +41,10 @@ Before running the application, ensure you have the following installed:
 
 ## ⚙️ Configuration (`script_profile.json`)
 
-The logic is defined in `script_profile.json`. The application will generate a default profile if one does not exist.
+The logic is defined in `skill_config.json`. The application will generate a default profile if one does not exist.
 
 ### Parameters
 
-* `EnableAutoReturn`: true/false. If enabled, the script will check the map coordinates after every skill loop and move the character back to the starting point (F9 location).
 * `LoopDelayMs`: Time to wait (in ms) after finishing the entire list of skills before starting over.
 * `Skills`: An array of steps to execute.
 
@@ -68,7 +67,6 @@ The logic is defined in `script_profile.json`. The application will generate a d
 ```json
 {
   "LoopDelayMs": 0,
-  "EnableAutoReturn": true,
   "Skills": [
     {
       "Note": "Skill Q (Combo)",
