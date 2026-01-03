@@ -41,7 +41,7 @@ Before running the application, ensure you have the following installed:
 
 ## ⚙️ Configuration (`script_profile.json`)
 
-The logic is defined in `script_profile.json`. The application will generate a default profile if one does not exist.
+The logic is defined in `skill_config.json`. The application will generate a default profile if one does not exist.
 
 ### Parameters
 
