@@ -9,40 +9,39 @@ namespace LostArkAutoPlayer.Services
 {
     public class VisualPositionService : IDisposable
     {
+        public event Action<Bitmap> OnDebugImageReady;
+
         // ==========================================
-        // [參數設定區] - 請修改這裡
+        // [參數設定區]
         // ==========================================
 
-        // 2. 顏色範圍 (維持不變)
+        // 1. 狀態文字位置 (百分比)
+        private const double TEXT_X_RATIO = 0.30; // 靠右 30%
+        private const double TEXT_Y_RATIO = 0.05; // 靠上 5%
+        private const double LINE_SPACING_RATIO = 0.04;
+
+        // 2. 顏色與 ROI
         private readonly Scalar _lowerGreen = new Scalar(35, 40, 60);
         private readonly Scalar _upperGreen = new Scalar(95, 255, 255);
 
-        // 3. ROI 裁切 (維持不變)
         private const double IGNORE_TOP_RATIO = 0.15;
         private const double IGNORE_BOTTOM_RATIO = 0.15;
         private const double IGNORE_LEFT_RATIO = 0.20;
         private const double IGNORE_RIGHT_RATIO = 0.20;
 
-        // 4. 移動參數 [關鍵修改點]
         private const double _minContourArea = 30;
         private const short MAX_STICK_VALUE = 32767;
-
-        // [修改] 容許誤差：從 30 改為 10
-        // 這樣距離 26 的時候，程式就不會偷懶，會繼續往右推
         private const int MOVEMENT_THRESHOLD = 10;
-
         private const int SLOW_DOWN_DISTANCE = 200;
-
-        // [修改] 最小力度：從 0.6 改為 0.75
-        // 因為現在只剩下最後幾步路，如果推太小力 (例如 40%) 遊戲可能會判定為 Deadzone 而不動
-        // 改成 0.75 保證它會「用力」把最後這 26 像素走完
         private const double MIN_STICK_STRENGTH = 0.75;
 
-        // 5. 除錯設定
         private const bool ENABLE_DEBUG_SAVE = false;
-
         private string _debugFolderPath;
         private OpenCvSharp.Point? _targetPosition = null;
+
+        // ★ 新增：F7 Overlay 開關狀態
+        public bool IsOverlayEnabled { get; set; } = true;
+        public bool IsScriptRunning { get; set; } = false;
 
         public VisualPositionService()
         {
@@ -54,7 +53,7 @@ namespace LostArkAutoPlayer.Services
 
         public bool SetCurrentAsTarget(Bitmap screenshot)
         {
-            var result = GetPositionAndSaveDebug(screenshot, "SetOrigin");
+            var result = GetPositionAndProcessDebug(screenshot, "SetOrigin");
             if (result.Center.HasValue)
             {
                 _targetPosition = result.Center.Value;
@@ -63,16 +62,26 @@ namespace LostArkAutoPlayer.Services
             return false;
         }
 
-        public void ResetTarget() => _targetPosition = null;
+        public void ResetTarget()
+        {
+            _targetPosition = null;
+            OnDebugImageReady?.Invoke(null);
+        }
 
         public (short stickX, short stickY, double distance) CalculateCorrectionVector(Bitmap screenshot)
         {
-            if (!_targetPosition.HasValue) return (0, 0, 0);
+            // 只要 "沒設定原點 (F8 OFF)" 或者 "腳本沒跑 (F9 OFF)"
+            // -> 強制只顯示文字
+            if (!_targetPosition.HasValue || !IsScriptRunning)
+            {
+                DrawOnlyStatus(screenshot);
+                return (0, 0, 0);
+            }
 
-            var result = GetPositionAndSaveDebug(screenshot, "Correction");
+            // F8+F9 都開啟，才進行偵測
+            var result = GetPositionAndProcessDebug(screenshot, "Correction");
             if (!result.Center.HasValue) return (0, 0, 0);
 
-            // 1. 計算座標差異
             OpenCvSharp.Point current = result.Center.Value;
             OpenCvSharp.Point target = _targetPosition.Value;
 
@@ -80,20 +89,12 @@ namespace LostArkAutoPlayer.Services
             double dy = target.Y - current.Y;
             double distance = Math.Sqrt(dx * dx + dy * dy);
 
-            string dirH = Math.Abs(dx) < 10 ? "-" : (dx > 0 ? "[右] ->" : "[左] <-");
-            string dirV = Math.Abs(dy) < 10 ? "-" : (dy > 0 ? "[下] v" : "[上] ^");
-            Console.WriteLine($"[Pos] Dist:{distance:F0} | {dirH} {dirV}");
-
-            // 這裡就是關鍵：如果 Distance(26) < Threshold(10) 才會停。
-            // 現在改成 10，所以 26 > 10，它會繼續往下執行移動邏輯。
             if (distance < MOVEMENT_THRESHOLD) return (0, 0, distance);
 
-            // 2. 角度計算
             double calcDx = dx;
             double calcDy = -dy;
             double angle = Math.Atan2(calcDy, calcDx);
 
-            // 3. 力度計算
             double strengthRatio = Math.Min(distance / SLOW_DOWN_DISTANCE, 1.0);
             double finalStrength = Math.Max(strengthRatio, MIN_STICK_STRENGTH) * MAX_STICK_VALUE;
 
@@ -103,7 +104,19 @@ namespace LostArkAutoPlayer.Services
             return (stickX, stickY, distance);
         }
 
-        private (OpenCvSharp.Point? Center, OpenCvSharp.Rect BoundingBox) GetPositionAndSaveDebug(Bitmap screenshot, string prefix)
+        private void DrawOnlyStatus(Bitmap screenshot)
+        {
+            using (var src = BitmapConverter.ToMat(screenshot))
+            using (var debugImg = new Mat(src.Size(), MatType.CV_8UC3, Scalar.All(0)))
+            {
+                DrawStatusText(debugImg);
+
+                var bmp = BitmapConverter.ToBitmap(debugImg);
+                OnDebugImageReady?.Invoke(bmp);
+            }
+        }
+
+        private (OpenCvSharp.Point? Center, OpenCvSharp.Rect BoundingBox) GetPositionAndProcessDebug(Bitmap screenshot, string prefix)
         {
             using (var src = BitmapConverter.ToMat(screenshot))
             {
@@ -159,39 +172,77 @@ namespace LostArkAutoPlayer.Services
                         finalCenter = new OpenCvSharp.Point((int)(circleCenter.X + roiRect.X), (int)(circleCenter.Y + roiRect.Y));
                     }
 
-                    if (ENABLE_DEBUG_SAVE)
+                    // 繪圖
+                    using (var debugImg = new Mat(src.Size(), MatType.CV_8UC3, Scalar.All(0)))
                     {
-                        using (var debugImg = src.Clone())
+                        // ★ 若 F7 開啟，才畫框線與圓圈
+                        if (IsOverlayEnabled && _targetPosition.HasValue)
                         {
-                            Cv2.Rectangle(debugImg, roiRect, Scalar.Yellow, 2);
                             if (finalCenter.HasValue)
                             {
                                 Cv2.Rectangle(debugImg, finalRect, Scalar.Red, 1);
                                 Cv2.Circle(debugImg, finalCenter.Value, (int)circleRadius, Scalar.Green, 2);
                                 Cv2.DrawMarker(debugImg, finalCenter.Value, Scalar.Red, MarkerTypes.Cross, 20, 2);
                             }
-                            if (_targetPosition.HasValue)
+
+                            Cv2.Circle(debugImg, _targetPosition.Value, 5, Scalar.Blue, -1);
+                            Cv2.PutText(debugImg, "ORIGIN", _targetPosition.Value, HersheyFonts.HersheySimplex, 0.5, Scalar.Blue, 1);
+
+                            if (finalCenter.HasValue)
                             {
-                                Cv2.Circle(debugImg, _targetPosition.Value, 5, Scalar.Blue, -1);
-                                Cv2.PutText(debugImg, "ORIGIN", _targetPosition.Value, HersheyFonts.HersheySimplex, 0.5, Scalar.Blue, 1);
-                                if (finalCenter.HasValue)
-                                {
-                                    Cv2.Line(debugImg, finalCenter.Value, _targetPosition.Value, Scalar.Magenta, 2);
-                                }
+                                Cv2.Line(debugImg, finalCenter.Value, _targetPosition.Value, Scalar.Magenta, 2);
                             }
+                        }
+
+                        // 無論 F7 是否開啟，狀態文字都顯示
+                        DrawStatusText(debugImg);
+
+                        var bitmapForOverlay = BitmapConverter.ToBitmap(debugImg);
+                        OnDebugImageReady?.Invoke(bitmapForOverlay);
+
+                        if (ENABLE_DEBUG_SAVE)
+                        {
                             string filename = Path.Combine(_debugFolderPath, $"{prefix}_{DateTime.Now.Ticks}.png");
                             debugImg.SaveImage(filename);
                         }
                     }
+
                     return (finalCenter, finalRect);
                 }
             }
         }
 
-        public OpenCvSharp.Rect GetDetectedRect(Bitmap screenshot)
+        private void DrawStatusText(Mat img)
         {
-            var result = GetPositionAndSaveDebug(screenshot, "DebugView");
-            return result.BoundingBox;
+            // 計算間距高度
+            int spacing = (int)(img.Height * LINE_SPACING_RATIO);
+            if (spacing < 30) spacing = 30; // 最小間距保護
+
+            // 計算 Y 座標
+            int x = (int)(img.Width * TEXT_X_RATIO);
+            int yScript = (int)(img.Height * TEXT_Y_RATIO);
+            int yReturn = yScript + spacing;
+            int yOverlay = yReturn + spacing; // ★ 第三行位置
+
+            var posScript = new OpenCvSharp.Point(x, yScript);
+            var posReturn = new OpenCvSharp.Point(x, yReturn);
+            var posOverlay = new OpenCvSharp.Point(x, yOverlay); // ★ 第三行座標點
+
+            // 1. F9 Script Status
+            string scriptTxt = IsScriptRunning ? "[F9/F10] SCRIPT: [ON]" : "[F9/F10] SCRIPT: [OFF]";
+            Scalar scriptCol = IsScriptRunning ? Scalar.Lime : Scalar.Red;
+            Cv2.PutText(img, scriptTxt, posScript, HersheyFonts.HersheySimplex, 1.0, scriptCol, 2);
+
+            // 2. F8 Auto Return Status
+            string returnTxt = _targetPosition.HasValue ? "[F8] AUTO RETURN: [ON]" : "[F8] AUTO RETURN: [OFF]";
+            Scalar returnCol = _targetPosition.HasValue ? Scalar.Cyan : Scalar.Red;
+            Cv2.PutText(img, returnTxt, posReturn, HersheyFonts.HersheySimplex, 1.0, returnCol, 2);
+
+            // 3. F7 Overlay Status (★ 新增的顯示邏輯)
+            string overlayTxt = IsOverlayEnabled ? "[F7] OVERLAY: [ON]" : "[F7] OVERLAY: [OFF]";
+            // ON 用綠色，OFF 用紅色
+            Scalar overlayCol = IsOverlayEnabled ? Scalar.Lime : Scalar.Red;
+            Cv2.PutText(img, overlayTxt, posOverlay, HersheyFonts.HersheySimplex, 1.0, overlayCol, 2);
         }
 
         public void Dispose() { }
