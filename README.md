@@ -11,7 +11,7 @@ This tool utilizes **ViGEm** (Virtual Gamepad Emulation) to simulate Xbox 360 co
 
 * **Background Execution**: Works even when the game window is not focused (requires Borderless/Windowed mode).
 * **Virtual Controller Emulation**: Uses `ViGEmBus` to mimic physical Xbox 360 hardware signals, bypassing standard software input detection.
-* **JSON-Based Profiles**: Fully customizable rotation logic via `script_profile.json`.
+* **JSON-Based Profiles**: Fully customizable rotation logic via `skill_config.json`.
 * **Auto-Updater**: Automatically checks for the latest releases from GitHub and updates seamlessly.
 * **Smart Input Handling**: Supports both **Sequential** (Combo inputs) and **Simultaneous** (Directional movement) input modes.
 
