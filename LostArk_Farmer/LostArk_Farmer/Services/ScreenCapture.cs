@@ -28,7 +28,7 @@ namespace LostArkAutoPlayer.Services
         // 0x00000002 = PW_RENDERFULLCONTENT (Windows 8.1+)
         // 0x00000003 = PW_CLIENTONLY | PW_RENDERFULLCONTENT
         private const uint PW_RENDERFULLCONTENT = 0x00000002;
-
+           
         /// <summary>
         /// 使用 PrintWindow 進行後台截圖
         /// </summary>

@@ -13,7 +13,7 @@ namespace LostArkAutoPlayer
 {
     class Program
     {
-        const string VERSION = "1.0.4";
+        const string VERSION = "1.0.5";
         const string CONFIG_PATH = "skill_config.json";
 
         static volatile bool _isRunning = false;
@@ -34,6 +34,10 @@ namespace LostArkAutoPlayer
             Console.WriteLine($"=== Lost Ark Farmer v{VERSION} ===");
             Console.WriteLine("模式: 大地圖 (Tab) 綠箭頭");
             Console.ResetColor();
+
+            var updateService = new UpdateService(VERSION, "sd016808", "LostArkFarmer");
+            // 1. 檢查更新
+            await updateService.CheckForUpdatesAsync();
 
             // 1. 啟動 Overlay (UI Thread)
             Thread uiThread = new Thread(() =>
