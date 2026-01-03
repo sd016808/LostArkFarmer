@@ -3,7 +3,7 @@ using Newtonsoft.Json;
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.IO.Compression; // 需要引用 System.IO.Compression.FileSystem (如果是 .NET Framework)
+using System.IO.Compression; // 若是 .NET Framework 需引用 System.IO.Compression.FileSystem
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Threading;
@@ -24,7 +24,11 @@ namespace LostArkAutoPlayer.Services
             _githubRepo = repo;
         }
 
-        public async Task CheckForUpdatesAsync()
+        /// <summary>
+        /// 檢查並執行更新
+        /// </summary>
+        /// <returns>回傳 true 代表正在更新或是需要停止主程式；回傳 false 代表無更新，可繼續執行。</returns>
+        public async Task<bool> CheckForUpdatesAsync()
         {
             try
             {
@@ -37,37 +41,49 @@ namespace LostArkAutoPlayer.Services
                     string url = $"https://api.github.com/repos/{_githubUser}/{_githubRepo}/releases/latest";
                     var response = await httpClient.GetAsync(url);
 
-                    if (!response.IsSuccessStatusCode) return;
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        // 請求失敗 (例如網路不通)，視為無更新，讓程式繼續跑
+                        return false;
+                    }
 
                     var content = await response.Content.ReadAsStringAsync();
                     var release = JsonConvert.DeserializeObject<GithubRelease>(content);
 
                     if (ShouldUpdate(release.TagName))
                     {
-                        PromptUpdate(release);
+                        // ★ 這裡會等待使用者的 Y/N 選擇，以及後續的下載過程
+                        return await PromptUpdateAsync(release);
                     }
                     else
                     {
                         Console.WriteLine($"目前版本 v{_currentVersion} 已是最新。");
+                        return false;
                     }
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[Update Error] {ex.Message}");
+                // 發生錯誤時不中斷主程式
+                return false;
             }
-            Console.WriteLine();
+            finally
+            {
+                Console.WriteLine();
+            }
         }
 
         private bool ShouldUpdate(string tagName)
         {
             string vRemote = tagName.TrimStart('v', 'V');
+            // 簡單的版本號比對 logic
             return Version.TryParse(vRemote, out Version remoteVer) &&
                    Version.TryParse(_currentVersion, out Version currentVer) &&
                    remoteVer > currentVer;
         }
 
-        private void PromptUpdate(GithubRelease release)
+        private async Task<bool> PromptUpdateAsync(GithubRelease release)
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
             Console.WriteLine($"\n★ 發現新版本: {release.TagName}");
@@ -81,17 +97,29 @@ namespace LostArkAutoPlayer.Services
             if (asset == null)
             {
                 Console.WriteLine("錯誤：找不到可用的更新檔案 (.zip 或 .exe)。");
-                return;
+                return false;
             }
 
             Console.WriteLine("\n是否立即更新? (Y/N) [10秒後自動跳過]");
-            if (WaitForInput(5000))
+
+            // 等待輸入，若超時則回傳 false
+            bool hasInput = await Task.Run(() => WaitForInput(10000));
+
+            if (hasInput)
             {
-                if (Console.ReadKey(true).Key == ConsoleKey.Y)
+                var key = Console.ReadKey(true).Key;
+                if (key == ConsoleKey.Y)
                 {
-                    _ = PerformUpdateAsync(asset.BrowserDownloadUrl, asset.Name, asset.Size);
+                    // ★ 關鍵修正：這裡使用 await，主程式會停在這裡直到下載完成
+                    await PerformUpdateAsync(asset.BrowserDownloadUrl, asset.Name, asset.Size);
+
+                    // 下載並執行 Bat 後通常會關閉程式，回傳 true 告知主程式停止
+                    return true;
                 }
             }
+
+            Console.WriteLine("\n跳過更新。");
+            return false;
         }
 
         private async Task PerformUpdateAsync(string url, string fileName, long size)
@@ -100,39 +128,47 @@ namespace LostArkAutoPlayer.Services
             string tempDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "UpdateTemp");
             string downloadPath = Path.Combine(tempDir, fileName);
 
-            // 1. 清理與建立暫存目錄
-            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
-            Directory.CreateDirectory(tempDir);
-
-            // 2. 下載檔案
-            using (var client = new HttpClient())
-            using (var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead))
-            using (var stream = await response.Content.ReadAsStreamAsync())
-            using (var fileStream = File.Create(downloadPath))
+            try
             {
-                var buffer = new byte[8192];
-                long totalRead = 0;
-                int read;
-                while ((read = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                // 1. 清理與建立暫存目錄
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+                Directory.CreateDirectory(tempDir);
+
+                // 2. 下載檔案
+                using (var client = new HttpClient())
+                using (var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead))
+                using (var stream = await response.Content.ReadAsStreamAsync())
+                using (var fileStream = File.Create(downloadPath))
                 {
-                    await fileStream.WriteAsync(buffer, 0, read);
-                    totalRead += read;
-                    DrawProgressBar(totalRead, size);
+                    var buffer = new byte[8192];
+                    long totalRead = 0;
+                    int read;
+                    while ((read = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                    {
+                        await fileStream.WriteAsync(buffer, 0, read);
+                        totalRead += read;
+                        DrawProgressBar(totalRead, size);
+                    }
                 }
+
+                Console.WriteLine("\n下載完成，正在處理檔案...");
+
+                // 3. 如果是 ZIP，解壓縮
+                if (fileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.WriteLine("解壓縮中...");
+                    ZipFile.ExtractToDirectory(downloadPath, tempDir);
+                    File.Delete(downloadPath); // 刪除 zip 本身，只留內容
+                }
+
+                // 4. 執行 Bat 更新 (這會關閉當前程式)
+                ExecuteBatchUpdate(tempDir);
             }
-
-            Console.WriteLine("\n下載完成，正在處理檔案...");
-
-            // 3. 如果是 ZIP，解壓縮
-            if (fileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            catch (Exception ex)
             {
-                Console.WriteLine("解壓縮中...");
-                ZipFile.ExtractToDirectory(downloadPath, tempDir);
-                File.Delete(downloadPath); // 刪除 zip 本身，只留內容
+                Console.WriteLine($"\n更新過程發生錯誤: {ex.Message}");
+                // 這裡可以選擇是否拋出異常或讓使用者手動處理
             }
-
-            // 4. 執行 Bat 更新
-            ExecuteBatchUpdate(tempDir);
         }
 
         private void ExecuteBatchUpdate(string sourceDir)
@@ -141,17 +177,16 @@ namespace LostArkAutoPlayer.Services
             string batchPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "update_script.bat");
             string workingDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\');
 
-            // 專業的 Bat 更新腳本：
-            // 1. 等待主程式關閉
-            // 2. 使用 xcopy 把 temp 資料夾內容全部覆蓋到根目錄 (/E包含子目錄, /Y強制覆蓋, /H包含隱藏檔)
-            // 3. 刪除 temp 資料夾
-            // 4. 重啟主程式
-            // 5. 刪除 bat
+            // 批次檔邏輯：等待 -> 複製(更新) -> 刪除暫存 -> 重啟 -> 自刪
             string script = $@"
 @echo off
+echo Waiting for application to close...
 timeout /t 2 /nobreak > nul
+echo Updating files...
 xcopy ""{sourceDir}\*"" ""{workingDir}"" /E /H /Y /C
+echo Cleaning up...
 rmdir /s /q ""{sourceDir}""
+echo Restarting application...
 start """" ""{currentExe}""
 del ""%~f0""
 ";
@@ -161,10 +196,11 @@ del ""%~f0""
             {
                 FileName = batchPath,
                 UseShellExecute = true,
-                CreateNoWindow = true,
+                CreateNoWindow = true, // 設為 false 可以看到 cmd 視窗 debug
                 WindowStyle = ProcessWindowStyle.Hidden
             });
 
+            Console.WriteLine("更新腳本已啟動，程式即將關閉...");
             Environment.Exit(0);
         }
 

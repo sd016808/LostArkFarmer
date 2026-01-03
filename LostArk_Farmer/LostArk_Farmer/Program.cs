@@ -36,6 +36,7 @@ namespace LostArkAutoPlayer
             Console.ResetColor();
 
             var updateService = new UpdateService(VERSION, "sd016808", "LostArkFarmer");
+
             // 1. 檢查更新
             await updateService.CheckForUpdatesAsync();
 
