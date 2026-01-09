@@ -13,7 +13,7 @@ namespace LostArkAutoPlayer
 {
     class Program
     {
-        const string VERSION = "1.0.5";
+        const string VERSION = "1.0.6";
         const string CONFIG_PATH = "skill_config.json";
 
         static volatile bool _isRunning = false;
@@ -86,7 +86,7 @@ namespace LostArkAutoPlayer
             }
 
             // 初始化控制器與視窗
-            _controllerService.Initialize();
+            await _controllerService.InitializeAsync();
             await _windowService.WaitForGameProcessAsync();
 
             // 5. 事件綁定

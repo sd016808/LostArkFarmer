@@ -3,6 +3,7 @@ using Nefarius.ViGEm.Client.Targets;
 using Nefarius.ViGEm.Client.Targets.Xbox360;
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace LostArkAutoPlayer.Services
 {
@@ -21,22 +22,61 @@ namespace LostArkAutoPlayer.Services
             { "Start", Xbox360Button.Start }, { "Back", Xbox360Button.Back }
         };
 
-        public void Initialize()
+        // 注意：方法簽章改成 async Task
+        public async Task InitializeAsync()
+        {
+            int maxRetries = 3;
+            int delayMs = 1000;
+
+            for (int i = 0; i < maxRetries; i++)
+            {
+                try
+                {
+                    Console.WriteLine($"[{i + 1}/{maxRetries}] 初始化虛擬手把驅動 (ViGEm)...");
+
+                    Cleanup(); // 確保乾淨的狀態
+
+                    // ViGEm 的初始化通常不是 async 的，若會卡住 UI，可以包在 Task.Run 裡
+                    await Task.Run(() =>
+                    {
+                        _client = new ViGEmClient();
+                        _controller = _client.CreateXbox360Controller();
+                        _controller.AutoSubmitReport = true;
+                        _controller.Connect();
+                    });
+
+                    Console.WriteLine(">> 虛擬手把已連線成功。");
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[Warning] 初始化失敗: {ex.Message}");
+
+                    if (i == maxRetries - 1)
+                    {
+                        Console.WriteLine("[Fatal] 無法連接虛擬手把驅動。");
+                        throw;
+                    }
+
+                    // 非阻塞式等待
+                    await Task.Delay(delayMs);
+                }
+            }
+        }
+
+        // 輔助方法：確保釋放資源
+        private void Cleanup()
         {
             try
             {
-                Console.WriteLine(">> 初始化虛擬手把驅動 (ViGEm)...");
-                _client = new ViGEmClient();
-                _controller = _client.CreateXbox360Controller();
-                _controller.AutoSubmitReport = true; // 自動回報狀態，減少手動呼叫
-                _controller.Connect();
-                Console.WriteLine(">> 虛擬手把已連線。");
+                _controller?.Disconnect();
+                _client?.Dispose();
             }
-            catch (Exception ex)
+            catch { /* 忽略釋放過程的錯誤 */ }
+            finally
             {
-                Console.WriteLine($"[Driver Error] 手把初始化失敗: {ex.Message}");
-                Console.WriteLine("請確認已安裝 ViGEmBus Driver 並以管理員身分執行。");
-                throw; // 拋出錯誤讓主程式知道
+                _controller = null;
+                _client = null;
             }
         }
 
